@@ -5,6 +5,14 @@ TagManager:
   serializedVersion: 2
   tags:
   - Cherry
+  - Wall
+  - LeftTele
+  - RightTele
+  - Diot
+  - BSC
+  - powerpellet
+  - GhostTag
+  - OnTriggerEnter2D
   layers:
   - Default
   - TransparentFX

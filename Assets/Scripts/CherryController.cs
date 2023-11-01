@@ -67,7 +67,7 @@ public class CherryController : MonoBehaviour
 
     private IEnumerator MoveCherryToDestination()
     {
-        GameObject cherry = GameObject.FindWithTag("Cherry"); // Assuming the prefab has a tag "Cherry"
+        GameObject cherry = GameObject.FindWithTag("BSC"); // Assuming the prefab has a tag "Cherry"
         float t = 0;
         Vector2 startPosition = cherry.transform.position;
 

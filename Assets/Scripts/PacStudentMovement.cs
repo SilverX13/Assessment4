@@ -1,6 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+using Unity.VisualScripting;
+
 
 public class PacStudentMovement : MonoBehaviour
 {
@@ -8,156 +12,398 @@ public class PacStudentMovement : MonoBehaviour
     public Animator animator;
     public ParticleSystem dustParticles;
     public AudioSource moveAudio;
+    public Transform leftTeleporterPosition;
+    public Transform rightTeleporterPosition;
+    public AudioClip wallCollisionSound;
+    public ParticleSystem wallCollisionParticles;
+    private bool isTeleporting = false;
 
-    private Vector3 targetPosition;
-    private bool isLerping;
-    private string lastInput = "";
-    private string currentInput = "";
-    private bool hasMovedOnce = false;
+    public TextMeshProUGUI scoreText;
+    private int score = 0;
+    public AudioClip diamondSound;
 
-    private readonly Dictionary<string, Vector3> directions = new Dictionary<string, Vector3>
+    public AudioSource scaredAudioSource;
+
+
+    public TextMeshProUGUI countdownText;
+    public float scaredTime = 10f;
+    private bool isScared = false;
+    private bool isRecovering = false;
+
+    public TextMeshProUGUI gameOverText;
+    private bool isGameOver = false;
+    public string startSceneName = "StartScene";
+    public int totalPellets;
+    private int eatenPellets = 0;
+
+    public TextMeshProUGUI gameTimerText;
+    private float elapsedTime = 0f;
+    private bool isGameStarted = false;
+
+    public bool hasGivenScore = false;
+
+    public Transform respawnPosition;
+
+    public int ghostLives = 3;
+
+    public GameObject[] lifeIndicators;
+
+    private Vector2 moveDirection = Vector2.zero;
+    private Rigidbody2D rb;
+
+    private Dictionary<KeyCode, Vector2> directions = new Dictionary<KeyCode, Vector2>
     {
-        { "w", Vector3.up },
-        { "a", Vector3.left },
-        { "s", Vector3.down },
-        { "d", Vector3.right }
+        { KeyCode.W, Vector2.up },
+        { KeyCode.A, Vector2.left },
+        { KeyCode.S, Vector2.down },
+        { KeyCode.D, Vector2.right }
     };
 
-    private readonly Dictionary<string, string> animationTriggers = new Dictionary<string, string>
+    private Dictionary<KeyCode, string> animationTriggers = new Dictionary<KeyCode, string>
     {
-        { "w", "MoveUp" },
-        { "a", "MoveLeft" },
-        { "s", "MoveDown" },
-        { "d", "MoveRight" }
+        { KeyCode.W, "MoveUp" },
+        { KeyCode.A, "MoveLeft" },
+        { KeyCode.S, "MoveDown" },
+        { KeyCode.D, "MoveRight" }
     };
 
     void Start()
     {
-        Setup();
+        rb = GetComponent<Rigidbody2D>();
+        moveAudio.Stop();
+        gameOverText.gameObject.SetActive(false);
+        gameTimerText.text = "00:00:00";
+
     }
 
     void Update()
     {
-        HandleInputAndMovement();
-    }
-
-    private void Setup()
-    {
-        moveAudio.Stop();
-        targetPosition = transform.position;
-    }
-
-    private void HandleInputAndMovement()
-    {
-        GetInput();
-
-        if (hasMovedOnce)
+        if (isGameStarted && !isGameOver)
         {
-            if (!isLerping)
+            elapsedTime += Time.deltaTime;
+            int minutes = (int)elapsedTime / 60;
+            int seconds = (int)elapsedTime % 60;
+            int milliseconds = (int)(elapsedTime * 100) % 100;
+
+            gameTimerText.text = string.Format("{0:00}:{1:00}:{2:00}", minutes, seconds, milliseconds);
+        }
+        if (!isGameOver)
+        {
+            GetInput();
+            PlayAnimationBasedOnDirection();
+            CheckGameOver();
+        }
+    }
+    public void StartGame()
+    {
+        isGameStarted = true;
+    }
+    void CheckGameOver()
+    {
+        if (eatenPellets >= totalPellets)
+        {
+            StartCoroutine(ShowGameOver());
+        }
+    }
+    IEnumerator ShowGameOver()
+    {
+        isGameOver = true;
+        isGameStarted = false;
+
+        moveDirection = Vector2.zero;
+        rb.velocity = Vector2.zero;
+
+        moveAudio.Stop();
+        scaredAudioSource.Stop();
+        countdownText.gameObject.SetActive(false);
+
+        gameOverText.gameObject.SetActive(true);
+
+        int currentScore = score;
+
+        int highScore = PlayerPrefs.GetInt("HighScore", 0);
+        float bestTime = PlayerPrefs.GetFloat("BestTime", float.MaxValue);
+
+        if (currentScore > highScore)
+        {
+            PlayerPrefs.SetInt("HighScore", currentScore);
+            PlayerPrefs.SetFloat("BestTime", elapsedTime);
+        }
+        else if (currentScore == highScore && elapsedTime < bestTime)
+        {
+            PlayerPrefs.SetFloat("BestTime", elapsedTime);
+        }
+
+
+
+        yield return new WaitForSeconds(3);
+        UnityEngine.SceneManagement.SceneManager.LoadScene(startSceneName);
+    }
+
+    void GetInput()
+    {
+        foreach (var keyDirectionPair in directions)
+        {
+            if (Input.GetKeyDown(keyDirectionPair.Key))
             {
-                HandleStaticStateMovement();
+                moveDirection = keyDirectionPair.Value;
+                break;
+            }
+        }
+    }
+
+    void FixedUpdate()
+    {
+        rb.velocity = moveDirection * speed;
+
+        if (moveDirection != Vector2.zero && !moveAudio.isPlaying)
+        {
+            moveAudio.Play();
+        }
+
+        else if (moveDirection == Vector2.zero)
+        {
+            moveAudio.Stop();
+        }
+    }
+
+    void PlayAnimationBasedOnDirection()
+    {
+        foreach (var pair in animationTriggers)
+        {
+            if (directions[pair.Key] == moveDirection)
+            {
+                animator.SetTrigger(pair.Value);
             }
             else
             {
-                ContinueLerping();
+                animator.ResetTrigger(pair.Value);
             }
         }
     }
 
-    private void HandleStaticStateMovement()
+    private void OnCollisionEnter2D(Collision2D collision)
     {
-        TryMove(lastInput);
-
-        if (!CanMoveTo(targetPosition))
+        if (collision.gameObject.CompareTag("Wall"))
         {
-            TryMove(currentInput);
+            AudioSource.PlayClipAtPoint(wallCollisionSound, transform.position);
+            wallCollisionParticles.Play();
+            moveDirection = Vector2.zero;
+        }
+        else if (collision.gameObject.CompareTag("LeftTele") && !isTeleporting)
+        {
+            StartCoroutine(TeleportCooldown(rightTeleporterPosition));
+        }
+        else if (collision.gameObject.CompareTag("RightTele") && !isTeleporting)
+        {
+            StartCoroutine(TeleportCooldown(leftTeleporterPosition));
         }
 
-        if (CanMoveTo(targetPosition))
-        {
-            BeginLerpProcess();
-        }
+
     }
 
-    private void GetInput()
+    IEnumerator TeleportCooldown(Transform teleportToPosition)
     {
-        if (Input.anyKeyDown)
+        isTeleporting = true;
+        Vector3 offset = moveDirection * 0.2f;
+        transform.position = teleportToPosition.position + offset;
+        yield return new WaitForSeconds(0.1f);
+        isTeleporting = false;
+    }
+
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+
+        if (other.CompareTag("Diot"))
         {
-            lastInput = Input.inputString;
+            eatenPellets++;
+            score += 10;
+            UpdateScoreUI();
 
-            if (directions.ContainsKey(lastInput))
+            moveAudio.Stop();
+
+            moveAudio.PlayOneShot(diamondSound);
+
+            StartCoroutine(PlayMoveAudioAfterDelay(diamondSound.length));
+
+            Destroy(other.gameObject);
+        }
+        if (other.CompareTag("BSC"))
+        {
+            score += 100;
+            UpdateScoreUI();
+            Destroy(other.gameObject);
+        }
+        if (other.CompareTag("powerpellet"))
+        {
+            isScared = true;
+            score += 100;
+            UpdateScoreUI();
+
+            AudioSource[] allAudioSources = FindObjectsOfType<AudioSource>();
+            foreach (AudioSource audio in allAudioSources)
             {
-                TryMove(lastInput);
+                audio.Stop();
+            }
 
-                if (CanMoveTo(targetPosition))
+            scaredAudioSource.Play();
+
+            StartCoroutine(ScaredCountdown());
+
+            GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
+            foreach (GameObject ghost in ghosts)
+            {
+                Animator ghostAnimator = ghost.GetComponent<Animator>();
+                if (ghostAnimator != null)
                 {
-                    hasMovedOnce = true;
-                    BeginLerpProcess();
+                    ghostAnimator.SetTrigger("scared");
                 }
             }
-        }
-    }
 
-    private void TryMove(string directionKey)
-    {
-        if (directions.TryGetValue(directionKey, out Vector3 dir))
+            Destroy(other.gameObject);
+        }
+
+        if (other.CompareTag("GhostTag") && isScared)
         {
-            targetPosition = transform.position + dir;
-            currentInput = directionKey;
+            if (!hasGivenScore)
+            {
+                score += 300;
+                UpdateScoreUI();
+                hasGivenScore = true;
+            }
+            Animator ghostAnimator = other.gameObject.GetComponent<Animator>();
+            if (ghostAnimator != null)
+            {
+                ghostAnimator.SetTrigger("death");
+                StartCoroutine(ReviveGhostAfterDeath(ghostAnimator));
+            }
         }
-    }
 
-    private bool CanMoveTo(Vector3 targetPos)
-    {
-        return true;
-    }
-
-    private void BeginLerpProcess()
-    {
-        isLerping = true;
-        ActivateAnimationAndEffects(currentInput);
-    }
-
-    private void ContinueLerping()
-    {
-        transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.deltaTime);
-
-        if (transform.position.Equals(targetPosition))
+        if (other.CompareTag("GhostTag") && !isScared && ghostLives > 0)
         {
-            EndLerpProcess();
+            DieAndRespawn();
         }
+
+
     }
 
-    private void ActivateAnimationAndEffects(string directionKey)
+    void DieAndRespawn()
     {
-        SetAnimation(directionKey);
-        dustParticles.Play();
-        if (!moveAudio.isPlaying) moveAudio.Play();
-    }
+        ghostLives--;
 
-    private void SetAnimation(string directionKey)
-    {
-        StopAllAnimations();
-        if (animationTriggers.TryGetValue(directionKey, out string animTrigger))
+        if (ghostLives == 0)
         {
-            animator.SetTrigger(animTrigger);
+            StartCoroutine(ShowGameOver());
+            return;
         }
+
+
+        UpdateLifeIndicator();
+
+        animator.SetTrigger("death");
+
+        transform.position = respawnPosition.position;
+
+        score = 0;
+        UpdateScoreUI();
+        elapsedTime = 0f;
+
     }
 
-    private void StopAllAnimations()
+    void UpdateLifeIndicator()
     {
-        foreach (var trigger in animationTriggers.Values)
+        for (int i = 0; i < lifeIndicators.Length; i++)
         {
-            animator.ResetTrigger(trigger);
+            if (i < ghostLives)
+            {
+                lifeIndicators[i].SetActive(true);
+            }
+            else
+            {
+                lifeIndicators[i].SetActive(false);
+            }
+        }
+    }
+
+    IEnumerator ReviveGhostAfterDeath(Animator ghostAnimator)
+    {
+        yield return new WaitForSeconds(5f);
+        ghostAnimator.ResetTrigger("death");
+        ghostAnimator.ResetTrigger("scared");
+        ghostAnimator.SetTrigger("back");
+        hasGivenScore = false;
+    }
+
+
+    IEnumerator ScaredCountdown()
+    {
+        float timer = scaredTime;
+
+        countdownText.gameObject.SetActive(true);
+        GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
+        while (timer > 0)
+        {
+            countdownText.text = Mathf.Ceil(timer).ToString();
+
+            if (timer <= 3 && !isRecovering)
+            {
+                isRecovering = true;
+
+                foreach (GameObject ghost in ghosts)
+                {
+                    Animator ghostAnimator = ghost.GetComponent<Animator>();
+                    if (ghostAnimator != null)
+                    {
+                        ghostAnimator.SetTrigger("recover");
+                    }
+                }
+            }
+            else
+            {
+                foreach (GameObject ghost in ghosts)
+                {
+                    Animator ghostAnimator = ghost.GetComponent<Animator>();
+                    if (ghostAnimator != null)
+                    {
+                        ghostAnimator.ResetTrigger("recover");
+                    }
+                }
+            }
+            yield return new WaitForSeconds(1);
+            timer -= 1;
         }
 
-        dustParticles.Stop();
-        moveAudio.Stop();
+        countdownText.text = "";
+        countdownText.gameObject.SetActive(false);
+        scaredAudioSource.Stop();
+
+        GameObject[] allGhosts = GameObject.FindGameObjectsWithTag("GhostTag");
+        foreach (GameObject ghost in allGhosts)
+        {
+            Animator ghostAnimator = ghost.GetComponent<Animator>();
+            if (ghostAnimator != null)
+            {
+                ghostAnimator.SetTrigger("back");
+            }
+        }
+        isScared = false;
+        isRecovering = false;
     }
 
-    private void EndLerpProcess()
+
+    IEnumerator PlayMoveAudioAfterDelay(float delay)
     {
-        isLerping = false;
-        StopAllAnimations();
+        yield return new WaitForSeconds(delay + 1f);
+        if (moveDirection != Vector2.zero)
+        {
+            moveAudio.Play();
+        }
     }
+
+    void UpdateScoreUI()
+    {
+        scoreText.text = "Score: " + score;
+    }
+
+
 }

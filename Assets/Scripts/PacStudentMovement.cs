@@ -8,48 +8,53 @@ using Unity.VisualScripting;
 
 public class PacStudentMovement : MonoBehaviour
 {
+    [Header("Movement Settings")]
     public float speed = 5.0f;
-    public Animator animator;
-    public ParticleSystem dustParticles;
-    public AudioSource moveAudio;
-    public Transform leftTeleporterPosition;
-    public Transform rightTeleporterPosition;
-    public AudioClip wallCollisionSound;
-    public ParticleSystem wallCollisionParticles;
-    private bool isTeleporting = false;
-
-    public TextMeshProUGUI scoreText;
-    private int score = 0;
-    public AudioClip diamondSound;
-
-    public AudioSource scaredAudioSource;
-
-
-    public TextMeshProUGUI countdownText;
-    public float scaredTime = 10f;
-    private bool isScared = false;
-    private bool isRecovering = false;
-
-    public TextMeshProUGUI gameOverText;
-    private bool isGameOver = false;
-    public string startSceneName = "StartScene";
-    public int totalPellets;
-    private int eatenPellets = 0;
-
-    public TextMeshProUGUI gameTimerText;
-    private float elapsedTime = 0f;
-    private bool isGameStarted = false;
-
-    public bool hasGivenScore = false;
-
-    public Transform respawnPosition;
-
-    public int ghostLives = 3;
-
-    public GameObject[] lifeIndicators;
-
     private Vector2 moveDirection = Vector2.zero;
     private Rigidbody2D rb;
+    private bool isTeleporting = false;
+
+    [Header("Gameplay Elements")]
+    public Transform leftTeleporterPosition;
+    public Transform rightTeleporterPosition;
+    public Transform respawnPosition;
+    public GameObject[] lifeIndicators;
+
+    [Header("Audio")]
+    public AudioSource moveAudio;
+    public AudioClip wallCollisionSound;
+    public AudioSource pacDeathAudio;
+    public AudioClip diamondSound;
+    public AudioSource scaredAudioSource;
+
+    [Header("Visual Effects")]
+    public Animator animator;
+    public ParticleSystem dustParticles;
+    public ParticleSystem wallCollisionParticles;
+
+    [Header("UI Elements")]
+    public TextMeshProUGUI scoreText;
+    public TextMeshProUGUI countdownText;
+    public TextMeshProUGUI gameOverText;
+    public TextMeshProUGUI gameTimerText;
+    
+
+    [Header("Game Status")]
+    public string startSceneName = "StartScene";
+    public int totalPellets;
+    public int ghostLives = 3;
+    private int score = 0;
+    private int eatenPellets = 0;
+    private float elapsedTime = 0f;
+    private bool isGameStarted = false;
+    private bool isGameOver = false;
+    private bool isScared = false;
+    private bool isRecovering = false;
+    private bool hasGivenScore = false;
+    public float scaredTime = 10f;
+
+    private Dictionary<KeyCode, Vector2> movementMappings;
+    private Dictionary<KeyCode, string> animationMappings;
 
     private Dictionary<KeyCode, Vector2> directions = new Dictionary<KeyCode, Vector2>
     {
@@ -290,7 +295,7 @@ public class PacStudentMovement : MonoBehaviour
     void DieAndRespawn()
     {
         ghostLives--;
-
+        pacDeathAudio.Play();
         if (ghostLives == 0)
         {
             StartCoroutine(ShowGameOver());
@@ -323,6 +328,10 @@ public class PacStudentMovement : MonoBehaviour
                 lifeIndicators[i].SetActive(false);
             }
         }
+    }
+    void UpdateScoreUI()
+    {
+        scoreText.text = "Score: " + score;
     }
 
     IEnumerator ReviveGhostAfterDeath(Animator ghostAnimator)
@@ -398,11 +407,6 @@ public class PacStudentMovement : MonoBehaviour
         {
             moveAudio.Play();
         }
-    }
-
-    void UpdateScoreUI()
-    {
-        scoreText.text = "Score: " + score;
     }
 
 

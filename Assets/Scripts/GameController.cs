@@ -7,37 +7,36 @@ public class GameController : MonoBehaviour
 {
     public TextMeshProUGUI roundStartCountdown;
     public GameObject pacStudent;
+
     private void Start()
     {
         StartCoroutine(StartRoundCountdown());
     }
+
     void Update()
     {
-
+       
     }
 
     IEnumerator StartRoundCountdown()
     {
+        PacStudentMovement pacStudentMovement = pacStudent.GetComponent<PacStudentMovement>();
+        pacStudentMovement.enabled = false; 
 
-        pacStudent.GetComponent<PacStudentMovement>().enabled = false;
-
-        roundStartCountdown.text = "3";
-        yield return new WaitForSeconds(1);
-
-        roundStartCountdown.text = "2";
-        yield return new WaitForSeconds(1);
-
-        roundStartCountdown.text = "1";
-        yield return new WaitForSeconds(1);
+       
+        for (int i = 3; i > 0; i--)
+        {
+            roundStartCountdown.text = i.ToString();
+            yield return new WaitForSeconds(1);
+        }
 
         roundStartCountdown.text = "GO!";
         yield return new WaitForSeconds(1);
 
-        pacStudent.GetComponent<PacStudentMovement>().enabled = true;
+       
+        pacStudentMovement.enabled = true;
+        pacStudentMovement.StartGame(); 
 
-        pacStudent.GetComponent<PacStudentMovement>().StartGame();
-
-        roundStartCountdown.gameObject.SetActive(false);
+        roundStartCountdown.gameObject.SetActive(false); 
     }
-
 }
